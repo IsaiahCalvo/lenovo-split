@@ -33,6 +33,7 @@
 !/research/
 /research/*
 !/research/PHASE1_FINDINGS.md
+!/research/MONITOR_CONTROL.md
 !/research/tools/
 /research/tools/*
 !/research/tools/dellpkg_extract.py

@@ -73,7 +73,8 @@ public struct ScreenLayout: Codable, Equatable, Sendable {
 
     /// Snap to a whole edge; reject placements that overlap or isolate a screen.
     public func moving(_ id: String, to point: ScreenPoint, sizes: [ScreenSize]) -> Self {
-        guard let own = sizes.first(where: { $0.id == id }) else { return self }
+        guard let own = sizes.first(where: { $0.id == id }),point.x.isFinite,point.y.isFinite else { return self }
+        if let reordered = reorderedRow(id,to: point,sizes: sizes) { return reordered }
         var candidates: [ScreenPoint] = []
         for other in sizes where other.id != id {
             let r = rect(for: other)
@@ -91,4 +92,29 @@ public struct ScreenLayout: Codable, Equatable, Sendable {
             return proposed.validationError(sizes: sizes) == nil ? proposed : nil
         }.first ?? self
     }
+    /// Moving a screen past a neighbour in a horizontal row changes the order
+    /// and closes the old gap. IDs and vertical offsets stay with each screen.
+    private func reorderedRow(_ id: String,to point: ScreenPoint,sizes: [ScreenSize]) -> Self? {
+        guard validationError(sizes: sizes) == nil,let own = sizes.first(where: { $0.id == id }) else { return nil }
+        let row = sizes.sorted { rect(for: $0).minX < rect(for: $1).minX }
+        let commonTop = row.map { rect(for: $0).minY }.max() ?? 0
+        let commonBottom = row.map { rect(for: $0).maxY }.min() ?? 0
+        guard commonBottom-commonTop >= (row.map(\.height).min() ?? 0)*0.5,
+              min(point.y+own.height,commonBottom)-max(point.y,commonTop) >= own.height*0.5,
+              let oldIndex = row.firstIndex(where: { $0.id == id }) else { return nil }
+        var nextRow = row.filter { $0.id != id }
+        let center = point.x+own.width/2
+        let newIndex = nextRow.firstIndex { center < rect(for: $0).midX } ?? nextRow.count
+        guard newIndex != oldIndex else { return nil }
+        nextRow.insert(own,at: newIndex)
+        var next = self
+        var x = row.map { rect(for: $0).minX }.min() ?? 0
+        for size in nextRow {
+            next.origins[size.id] = .init(x: x,y: origins[size.id]?.y ?? 0)
+            x += size.width
+        }
+        next = next.normalized(anchor: sizes.contains { $0.id == "builtin" } ? "builtin" : "panel1")
+        return next.validationError(sizes: sizes) == nil ? next : nil
+    }
+
 }

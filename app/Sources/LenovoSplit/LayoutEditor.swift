@@ -22,7 +22,7 @@ struct LayoutEditor: View {
             HStack {
                 VStack(alignment: .leading,spacing: 4) {
                     Text("Arrange displays").font(.title2.bold())
-                    Text("Drag each screen to match your desk. Edges snap together.").foregroundStyle(.secondary)
+                    Text("Drag each screen to match your desk. Drag past another screen to change the order. Numbers stay with each screen.").foregroundStyle(.secondary)
                 }
                 Spacer()
                 Button("Identify") { model.identifyDisplays() }.disabled(!model.running)
@@ -93,7 +93,7 @@ struct LayoutEditor: View {
                         .overlay(RoundedRectangle(cornerRadius: 8).stroke(.white.opacity(0.5)))
                         .position(x: origin.x+rect.midX*s+offset.width,y: origin.y+rect.midY*s+offset.height)
                         .accessibilityLabel("Display \(number(size.id)), \(label(size.id))")
-                        .gesture(DragGesture().onChanged { value in
+                        .gesture(DragGesture(coordinateSpace: .named("display-layout")).onChanged { value in
                             guard model.previewSeconds == 0 else { return }
                             dragging = size.id; dragOffset = value.translation
                         }.onEnded { value in
@@ -103,7 +103,7 @@ struct LayoutEditor: View {
                             draft = draft.moving(size.id,to: .init(x: p.x+value.translation.width/s,y: p.y+value.translation.height/s),sizes: sizes)
                         })
                 }
-            }
+            }.coordinateSpace(name: "display-layout")
         }
     }
 }

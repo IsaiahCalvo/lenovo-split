@@ -19,8 +19,8 @@ cat > "$APP_BUNDLE/Contents/Info.plist" <<'PLIST'
 <key>CFBundleName</key><string>Lenovo Split</string>
 <key>CFBundleDisplayName</key><string>Lenovo Split</string>
 <key>CFBundlePackageType</key><string>APPL</string>
-<key>CFBundleShortVersionString</key><string>0.3.1</string>
-<key>CFBundleVersion</key><string>6</string>
+<key>CFBundleShortVersionString</key><string>0.3.2</string>
+<key>CFBundleVersion</key><string>7</string>
 <key>LSUIElement</key><true/>
 <key>LSMultipleInstancesProhibited</key><true/>
 <key>LSMinimumSystemVersion</key><string>14.0</string>

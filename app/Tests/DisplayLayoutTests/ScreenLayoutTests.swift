@@ -55,4 +55,30 @@ final class ScreenLayoutTests: XCTestCase {
         let external = Array(sizes.prefix(2))
         XCTAssertNil(ScreenLayout.defaultLayout(sizes: external).validationError(sizes: external))
     }
+    func testMiddleScreenCanMoveToEitherEndWithoutRenumbering() {
+        let original = ScreenLayout.defaultLayout(sizes: sizes)
+        for (x,expected) in [(-6000.0,["panel2","panel1","builtin"]),
+                             (3000.0,["panel1","builtin","panel2"])] {
+            let next = original.moving("panel2",to: .init(x: x,y: 0),sizes: sizes)
+            XCTAssertNil(next.validationError(sizes: sizes))
+            XCTAssertEqual(sizes.sorted { next.rect(for: $0).minX < next.rect(for: $1).minX }.map(\.id),expected)
+            XCTAssertEqual(next.origins["builtin"],.init(x: 0,y: 0))
+        }
+    }
+    func testEveryRowOrderIsReachableAndSurvivesSaving() throws {
+        let orders = [["panel1","panel2","builtin"],["panel1","builtin","panel2"],
+                      ["panel2","panel1","builtin"],["panel2","builtin","panel1"],
+                      ["builtin","panel1","panel2"],["builtin","panel2","panel1"]]
+        for expected in orders {
+            var layout = ScreenLayout.defaultLayout(sizes: sizes)
+            for id in expected.reversed() {
+                if sizes.min(by: { layout.rect(for: $0).minX < layout.rect(for: $1).minX })?.id == id { continue }
+                layout = layout.moving(id,to: .init(x: -6000,y: layout.origins[id]!.y),sizes: sizes)
+            }
+            let stored = try JSONDecoder().decode(ScreenLayout.self,from: JSONEncoder().encode(layout))
+            XCTAssertEqual(sizes.sorted { stored.rect(for: $0).minX < stored.rect(for: $1).minX }.map(\.id),expected)
+            XCTAssertNil(stored.validationError(sizes: sizes))
+        }
+    }
+
 }

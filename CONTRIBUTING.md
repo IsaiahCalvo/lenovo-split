@@ -6,7 +6,7 @@ Build with the current Xcode/Swift tools on macOS. Keep hardware checks narrow a
 
 - Run `swift test -c release` in `app/` and build the signed app bundle.
 - Test the menu panel: click outside, click Split again, press Escape, and switch apps. It must close and reopen reliably.
-- Identify each screen, move a rectangle, check pointer travel, let one preview time out, then keep a layout and reconnect. The hidden wide output must never appear in the editor.
+- Identify each screen, drag the middle rectangle to both ends and try all six row orders without renumbering, check pointer travel, let one preview time out, then keep a layout and reconnect. The hidden wide output must never appear in the editor.
 - Connect the Mac while a shared monitor is on another input. Wait more than 30 seconds, select its dock input, and check recovery. Repeat in both directions while running. Test USB reconnect, sleep/wake and stopping auto-connect.
 - Toggle Swap in both directions: Arrange names, saved labels and Identify badges must agree with the physical panel each virtual number is sent to. Save a name with Swap off, flip it on, and verify the same physical monitor keeps that name.
 - Test the built-in native Dock handler with other tools’ click actions disabled. Finder: background activation, minimize, restore, manual minimize then restore, drag an icon, press-and-hold, modifier-click, and toggle the feature off. Check the log confirms Lenovo Split performed the minimize/restore. Never substitute a companion app for this test. Keep MIT credits from Light Stats intact; do not embed GPL code in the MIT project.

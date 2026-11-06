@@ -21,7 +21,7 @@ The code targets macOS 14+, but earlier OS releases and other Mac/dock/monitor c
 - Menu-bar controls that dismiss on an outside click; no app icon in the Dock.
 - **Window recovery:** remember visible window positions during a split session and before unplug; restore surviving windows to the same physical output after reconnect. Windows stranded on the hidden transport are moved onto a usable screen on activation, reconnect, or **Recover windows now**. Recovery needs Accessibility and falls back to a visible screen when no saved position is available.
 - **Identify displays:** temporary numbers on each usable screen.
-- **Arrange displays:** drag rectangles, snap edges, label monitors, swap physical halves, and keep/revert a preview. Unconfirmed layouts revert after 15 seconds; confirmed layouts persist across reconnects.
+- **Arrange displays:** drag rectangles into any row order without renumbering, snap edges, label monitors, swap physical halves, and keep/revert a preview. Unconfirmed layouts revert after 15 seconds; confirmed layouts persist across reconnects.
 - Built-in **click-to-minimize on Apple’s native Dock**. Click an active app’s icon to minimize its standard desktop windows; click again to restore the set. No DockDoor, Vorssaint, Light Stats or other companion app is needed. No replacement app bars are drawn.
 - Optional window fitting for **Claude and Grok Bot only**, with a separate Accessibility permission. Smaller, tiled, minimized and true fullscreen windows are left alone.
 
@@ -63,6 +63,8 @@ The build uses the first local Apple Development identity, when present, to help
 6. Enable **Keep windows on visible screens** with Accessibility permission to recover windows after reconnect. Then optionally enable **Click an active app’s Dock icon to minimize**. It uses Lenovo Split’s Accessibility grant and acts on the app icon you click. Disable the same click action in any other Dock utility to avoid duplicate handlers. Window fitting is a separate opt-in feature.
 
 The built-in display remains the main screen while present. The hidden wide transport output is deliberately excluded from the editor. Arrange the usable displays in Lenovo Split rather than moving its hidden output in System Settings.
+
+For current input-switching and firmware-access research, see [Monitor control](research/MONITOR_CONTROL.md). Automatic Philips input switching is not implemented or verified.
 
 ## Shared monitor inputs and recovery
 
