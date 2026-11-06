@@ -72,6 +72,7 @@ final class Model: ObservableObject {
     private var attempts = 0
 
     init() {
+        UserDefaults.standard.register(defaults: ["fitAppIDs": ["com.anthropic.claudefordesktop", "com.anysphere.sand"]])
         controller.swapSides = swap
         if panelNames.count != 2 { panelNames = ["Display 1", "Display 2"] }
         controller.panelNames = panelNames
