@@ -22,6 +22,7 @@ cat > "$APP_BUNDLE/Contents/Info.plist" <<'PLIST'
 <key>CFBundleShortVersionString</key><string>0.2.0</string>
 <key>CFBundleVersion</key><string>3</string>
 <key>LSUIElement</key><true/>
+<key>LSMultipleInstancesProhibited</key><true/>
 <key>LSMinimumSystemVersion</key><string>14.0</string>
 <key>NSPrincipalClass</key><string>NSApplication</string>
 <key>NSHumanReadableCopyright</key><string>Adapted from WD19 Split, MIT license.</string>

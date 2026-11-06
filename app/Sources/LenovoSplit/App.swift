@@ -3,6 +3,7 @@ import SwiftUI
 import Combine
 import LenovoDock
 import DisplayLayout
+import Darwin
 
 struct HubError: Error, CustomStringConvertible, LocalizedError {
     let description: String
@@ -349,6 +350,7 @@ final class Delegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowD
     private var statusSubscription: AnyCancellable?
     private var layoutWindow: NSWindow?
     private var menuPreview: AnyCancellable?
+    private var reopenObserver: NSObjectProtocol?
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
         let preference = "NSStatusItem Preferred Position LenovoSplitStatus"
@@ -365,6 +367,9 @@ final class Delegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowD
         menu.delegate = self; menu.autoenablesItems = false
         item.menu = menu
         model.onOpenLayout = { [weak self] in self?.showLayout() }
+        reopenObserver = DistributedNotificationCenter.default().addObserver(forName: .init("local.lenovosplit.reopen"),object: nil,queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.showControls() }
+        }
         statusSubscription = model.$status.sink { [weak self] text in self?.statusItem?.button?.toolTip = "Lenovo Split: " + text }
         Log.write("status item created visible=\(item.isVisible) button=\(item.button != nil)")
         Log.write("launched menu-bar-only=true autoConnect=\(model.autoConnect) permission=\(model.permission) windowAccess=\(model.windowAccess)")
@@ -440,6 +445,7 @@ final class Delegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowD
     }
     func applicationWillTerminate(_ notification: Notification) {
         menu.cancelTracking()
+        if let reopenObserver { DistributedNotificationCenter.default().removeObserver(reopenObserver) }
         model.shutdown()
     }
 }
@@ -447,6 +453,17 @@ final class Delegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowD
 @main
 enum LenovoSplitMain {
     @MainActor static func main() {
+        let path = FileManager.default.temporaryDirectory.appendingPathComponent("LenovoSplit.lock").path
+        let lock = open(path,O_CREAT | O_RDWR | O_NOFOLLOW,S_IRUSR | S_IWUSR)
+        guard lock >= 0 else { Log.write("Could not open the single-instance lock; refusing a second display controller."); return }
+        guard flock(lock,LOCK_EX | LOCK_NB) == 0 else {
+            close(lock)
+            if !CommandLine.arguments.contains("--background") {
+                DistributedNotificationCenter.default().postNotificationName(.init("local.lenovosplit.reopen"),object: nil,userInfo: nil,deliverImmediately: true)
+            }
+            return
+        }
+        defer { close(lock) }
         let app = NSApplication.shared
         app.setActivationPolicy(.accessory)
         let delegate = Delegate()
