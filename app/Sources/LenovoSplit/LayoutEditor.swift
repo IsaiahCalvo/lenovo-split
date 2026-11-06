@@ -36,7 +36,7 @@ struct LayoutEditor: View {
                         TextField("Display \(i+1)",text: $names[i]).textFieldStyle(.roundedBorder)
                     }
                 }
-                Button("Save names") { model.savePanelNames(names); message = "Names saved. macOS will use them after the next reconnect." }
+                Button("Save names") { model.savePanelNames(names); message = "Names saved for these physical outputs." }
             }
             Toggle("Swap which physical monitor shows display 1 and 2",isOn: $model.swap)
                 .disabled(model.previewSeconds > 0 || !model.running)
@@ -61,6 +61,7 @@ struct LayoutEditor: View {
                 }
             }
         }.padding(24).frame(width: 620)
+            .onChange(of: model.panelNames) { _,updated in names = updated }
             .onChange(of: model.running) { _,running in
                 if running,let layout = model.controller.layout { draft = layout }
             }

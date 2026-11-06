@@ -25,7 +25,6 @@ final class TwoDisplayController: NSObject, ObservableObject {
 	var swapSides = false {
 		didSet { layoutLayers() }
 	}
-    var panelNames = ["Display 1", "Display 2"]
     private(set) var layout: ScreenLayout?
     var savedLayout: ScreenLayout?
 
@@ -59,8 +58,8 @@ final class TwoDisplayController: NSObject, ObservableObject {
 		Log.write("two: start physical=\(physical) wide=\(wide) panel=\(w)x\(h)")
 		status = "Creating displays…"
 
-		let left = try makePanel(name: panelNames[0], serial: 1, width: w, height: h)
-		let right = try makePanel(name: panelNames[1], serial: 2, width: w, height: h)
+		let left = try makePanel(name: "Lenovo Split 1", serial: 1, width: w, height: h)
+		let right = try makePanel(name: "Lenovo Split 2", serial: 2, width: w, height: h)
 		panels = [left, right]
 		try await waitUntil("virtual displays online", timeout: 5) {
 			Set([left.displayID, right.displayID]).isSubset(of: Self.onlineDisplays())

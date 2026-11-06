@@ -8,7 +8,8 @@ Build with the current Xcode/Swift tools on macOS. Keep hardware checks narrow a
 - Test the menu panel: click outside, click Split again, press Escape, and switch apps. It must close and reopen reliably.
 - Identify each screen, move a rectangle, check pointer travel, let one preview time out, then keep a layout and reconnect. The hidden wide output must never appear in the editor.
 - Connect the Mac while a shared monitor is on another input. Wait more than 30 seconds, select its dock input, and check recovery. Repeat in both directions while running. Test USB reconnect, sleep/wake and stopping auto-connect.
-- Toggle the custom app bars: one per usable screen, none on the hidden output; test launching an app and removal when toggled off or disconnected. Do not describe these bars as native Dock duplication.
+- Toggle Swap in both directions: Arrange names, saved labels and Identify badges must agree with the physical panel each virtual number is sent to. Save a name with Swap off, flip it on, and verify the same physical monitor keeps that name.
+- Keep Apple’s native Dock. If DockDoor is installed, check the Settings integration opens its actual settings and test click-to-minimize/restore with Finder. Do not embed GPL source in the MIT application or describe companion bars as native Dock duplication.
 - Check window fitting with large desktop windows in the allowlisted apps. True fullscreen, minimized, small and tiled windows must stay untouched.
 - Keep raw device data private. Compatibility reports need OS, Mac model, dock model/firmware, resolution, ports, selected inputs and observed behavior, not serials or complete system dumps.
 

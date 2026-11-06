@@ -5,6 +5,7 @@ import SwiftUI
 final class DisplayIdentifier {
     private var windows: [NSWindow] = []
     private var timer: Timer?
+    var isShowing: Bool { !windows.isEmpty }
 
     func show(displays: [(String, CGDirectDisplayID)], names: [String]) {
         hide()

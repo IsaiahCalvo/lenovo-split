@@ -10,7 +10,6 @@ final class WindowFitter {
     private var working = false
     var isRunning: () -> Bool = { false }
     var allowedBundleIDs: Set<String> = []
-    var appBarHeight: () -> CGFloat = { 0 }
 
     static var trusted: Bool { AXIsProcessTrusted() }
     static func requestPermission() {
@@ -36,16 +35,14 @@ final class WindowFitter {
             ($0.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value == CGMainDisplayID()
         })?.frame.height ?? 982
         let screens = NSScreen.screens
-        let barHeight = appBarHeight()
-        let dockHeight = max(barHeight,screens.map { max(0, $0.visibleFrame.minY - $0.frame.minY) }.max() ?? 0)
+        let dockHeight = screens.map { max(0, $0.visibleFrame.minY - $0.frame.minY) }.max() ?? 0
         guard dockHeight > 10 else { return }
         func topDown(_ r: CGRect) -> CGRect {
             CGRect(x: r.minX, y: mainHeight - r.maxY, width: r.width, height: r.height)
         }
         let areas: [(CGRect, CGRect)] = screens.compactMap { screen in
             let id = (screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value ?? 0
-            guard CGDisplayVendorNumber(id) == DisplayModes.virtualVendorID ||
-                  (barHeight > 0 && CGDisplayIsBuiltin(id) != 0) else { return nil }
+            guard CGDisplayVendorNumber(id) == DisplayModes.virtualVendorID else { return nil }
             let full = screen.frame; var safe = screen.visibleFrame
             let bottom = max(dockHeight, safe.minY - full.minY)
             safe.size.height -= full.minY + bottom - safe.minY

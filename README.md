@@ -21,7 +21,7 @@ The code targets macOS 14+, but earlier OS releases and other Mac/dock/monitor c
 - Menu-bar controls that dismiss on an outside click; no app icon in the Dock.
 - **Identify displays:** temporary numbers on each usable screen.
 - **Arrange displays:** drag rectangles, snap edges, label monitors, swap physical halves, and keep/revert a preview. Unconfirmed layouts revert after 15 seconds; confirmed layouts persist across reconnects.
-- Optional **app bar on every display** with pinned Dock apps and running apps. This is a custom launcher, not a copy of Apple's Dock. It does not provide native Dock stacks, Trash, window thumbnails, or change macOS Dock settings. Windows may need resizing to leave space for it.
+- Keeps Apple’s native Dock. Optional integration opens the separately installed [DockDoor](https://github.com/ejbills/DockDoor) settings for native-Dock click-to-minimize and window previews. No replacement app bars are drawn.
 - Optional window fitting for **Claude and Grok Bot only**, with a separate Accessibility permission. Smaller, tiled, minimized and true fullscreen windows are left alone.
 
 ## Build and install
@@ -58,8 +58,8 @@ The build uses the first local Apple Development identity, when present, to help
 2. Open Lenovo Split. Grant Screen Recording when requested; then start the screens. On newer macOS releases the OS may rename permission groups.
 3. Click **Identify displays**. Numbers 1 and 2 identify the virtual panels; 3 identifies the built-in display when present.
 4. Open **Arrange displays**. If the physical monitors have the numbers reversed, use **Swap which physical monitor shows display 1 and 2**. Then drag the rectangles to match the desk and select **Apply layout → Keep layout**.
-5. Give the screens names if desired. The names shown in macOS update on the next split startup. The app can identify its own virtual panels reliably; it does not pretend it can always retrieve both physical monitors' names through the combined signal.
-6. Optional: turn on the app bars. Optional: grant Accessibility for window fitting. These are separate features.
+5. Give the monitors names if desired. Names are stored against the physical output halves, so toggling Swap updates the names in Arrange and Identify immediately. The virtual screens in macOS use stable names `Lenovo Split 1` and `Lenovo Split 2`. The app does not pretend it can always retrieve both physical monitor names through the combined signal.
+6. Optional: open **Native Dock settings (DockDoor)**. If DockDoor is already installed, select **Dock Click Action → Minimize windows** in its Dock Previews settings. Install and grant any permissions yourself if it is not installed; Lenovo Split does not install it or grant its access. Optional window fitting in Lenovo Split has its own Accessibility permission.
 
 The built-in display remains the main screen while present. The hidden wide transport output is deliberately excluded from the editor. Arrange the usable displays in Lenovo Split rather than moving its hidden output in System Settings.
 
@@ -68,6 +68,12 @@ The built-in display remains the main screen while present. The hidden wide tran
 A monitor set to HDMI from another computer may stop advertising its DisplayPort connection to the dock. The app cannot draw on that panel until it selects the dock input. It keeps retrying with backoff rather than giving up after a fixed short window, and watches USB, display and wake events. A low-frequency check also detects dock mode/output changes and capture errors. Two unhealthy checks precede a restart to avoid rebuilding for a brief transition.
 
 Health checks do not rewrite the split mode or refresh the host EDID. Those changes happen only when preparing a split. Hardware input switching and sleep/wake must still be tested for each setup; the current hardware support list is intentionally narrow.
+
+## Native Dock behavior
+
+Lenovo Split does not replace, skin or inject code into Dock.app. Use the separately installed, open-source [DockDoor](https://github.com/ejbills/DockDoor) to add click-to-minimize and previews to Apple’s Dock. A Settings button opens that app if installed. Its source is GPLv3; Lenovo Split remains MIT and does not bundle it.
+
+DockDoor Free enhances the existing Dock. Its paid Pro edition is a separate replacement dock and is not required here. Neither this integration nor the display split makes multiple native Dock instances appear simultaneously.
 
 ## How it works
 
@@ -82,7 +88,8 @@ When needed after reconnect, a temporary **Mac-side EDID override** adds the mea
 - Screen Recording is needed for rendering; screen frames stay on this Mac. The app has no networking, analytics, account, or remote logging.
 - Protected video may be black. The app respects macOS content protection.
 - Capture adds latency and CPU/GPU work; this is not direct native scanout of two independent streams.
-- The app bars read local app names, icons and Dock-pinned app URLs. Clicking an icon asks macOS to open/activate the app. They do not inspect other app contents or list individual windows.
+- DockDoor is a separate application under its own GPLv3 license. Lenovo Split only opens its settings; no DockDoor code is embedded or relicensed. Its permissions and Dock behavior are controlled in DockDoor.
+- Apple’s Dock is not duplicated across displays. The rejected custom app-bar experiment has been removed.
 - Optional window fitting queries geometry only for the two allowlisted apps. It does not grant the app permission by itself or enlarge the allowlist automatically.
 - Layouts, monitor labels and preferences stay in the local user preferences. Logs contain state and geometry, not screen images or chat contents. Review logs before sharing.
 - Quitting removes the virtual displays and restores saved physical display positions when those displays remain online. The volatile dock split can remain until the dock resets; stop is not a firmware/default reset.

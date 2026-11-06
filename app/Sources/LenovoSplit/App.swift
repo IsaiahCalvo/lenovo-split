@@ -35,7 +35,10 @@ final class Model: ObservableObject {
         didSet { UserDefaults.standard.set(autoConnect, forKey: "autoConnect"); if autoConnect { paused = false; monitor?.schedule() } }
     }
     @Published var swap: Bool = UserDefaults.standard.bool(forKey: "swap") {
-        didSet { controller.swapSides = swap; UserDefaults.standard.set(swap, forKey: "swap") }
+        didSet {
+            controller.swapSides = swap; UserDefaults.standard.set(swap, forKey: "swap")
+            if identifier.isShowing { identifyDisplays() }
+        }
     }
     @Published var windowAccess = WindowFitter.trusted
     @Published var fitWindows = UserDefaults.standard.bool(forKey: "fitWindows") {
@@ -45,14 +48,9 @@ final class Model: ObservableObject {
         }
     }
     private let fitter = WindowFitter()
-    private let appBars = ScreenAppBars()
-    @Published var showAppBars = UserDefaults.standard.bool(forKey: "showAppBars") {
-        didSet {
-            UserDefaults.standard.set(showAppBars,forKey: "showAppBars")
-            appBars.setEnabled(showAppBars && running,displays: controller.layoutDisplays)
-        }
-    }
-    @Published private(set) var panelNames = UserDefaults.standard.stringArray(forKey: "panelNames") ?? ["Display 1", "Display 2"]
+    @Published private(set) var physicalOutputNames = ["Display 1", "Display 2"]
+    var panelNames: [String] { PanelAssignment(outputNames: physicalOutputNames).panelNames(swapped: swap) }
+    var hasDockDoor: Bool { NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.ethanbills.DockDoor") != nil }
     @Published private(set) var previewSeconds = 0
     @Published private(set) var layoutVerified = false
     var onOpenLayout: (() -> Void)?
@@ -74,14 +72,17 @@ final class Model: ObservableObject {
     init() {
         UserDefaults.standard.register(defaults: ["fitAppIDs": ["com.anthropic.claudefordesktop", "com.anysphere.sand"]])
         controller.swapSides = swap
-        if panelNames.count != 2 { panelNames = ["Display 1", "Display 2"] }
-        controller.panelNames = panelNames
+        if let names = UserDefaults.standard.stringArray(forKey: "physicalOutputNames"),names.count == 2 {
+            physicalOutputNames = names
+        } else if let legacy = UserDefaults.standard.stringArray(forKey: "panelNames"),legacy.count == 2 {
+            physicalOutputNames = PanelAssignment.fromPanelNames(legacy,swapped: swap).outputNames
+            UserDefaults.standard.set(physicalOutputNames,forKey: "physicalOutputNames")
+        }
         if let data = UserDefaults.standard.data(forKey: "screenLayout") {
             controller.savedLayout = try? JSONDecoder().decode(ScreenLayout.self,from: data)
         }
         fitter.allowedBundleIDs = Set(UserDefaults.standard.stringArray(forKey: "fitAppIDs") ?? [])
         fitter.isRunning = { [weak self] in self?.running == true }
-        fitter.appBarHeight = { [weak self] in self?.appBars.reservedHeight ?? 0 }
         fitter.setEnabled(fitWindows && windowAccess)
         monitor = DockMonitor { [weak self] in self?.dockChanged() }
     }
@@ -217,7 +218,6 @@ final class Model: ObservableObject {
                 try Task.checkCancellation()
                 guard token == generation else { return }
                 running = true; attempts = 0; healthFailures = 0
-                appBars.setEnabled(showAppBars,displays: controller.layoutDisplays)
                 status = "Two separate screens connected."
                 scheduleCheck(after: 10)
                 Log.write("STARTED panels=\(controller.panelIDs) frames=\(controller.frameCounts)")
@@ -244,7 +244,7 @@ final class Model: ObservableObject {
     private func stopInternal() {
         recoveryTimer?.invalidate(); recoveryTimer = nil
         previewTimer?.invalidate(); previewTimer = nil; previewSeconds = 0; previousLayout = nil; layoutVerified = false
-        identifier.hide(); appBars.setEnabled(false,displays: []); healthBusy = false
+        identifier.hide(); healthBusy = false
         generation += 1; startTask?.cancel(); startTask = nil
         controller.stop(); restoreOrigins(); running = false; busy = false
     }
@@ -260,12 +260,22 @@ final class Model: ObservableObject {
     }
     func savePanelNames(_ names: [String]) {
         guard names.count == 2 else { return }
-        panelNames = names.enumerated().map { index,value in
+        let cleaned = names.enumerated().map { index,value in
             let clean = value.trimmingCharacters(in: .whitespacesAndNewlines)
             return clean.isEmpty ? "Display \(index+1)" : String(clean.prefix(40))
         }
-        controller.panelNames = panelNames
-        UserDefaults.standard.set(panelNames,forKey: "panelNames")
+        physicalOutputNames = PanelAssignment.fromPanelNames(cleaned,swapped: swap).outputNames
+        UserDefaults.standard.set(physicalOutputNames,forKey: "physicalOutputNames")
+        if identifier.isShowing { identifyDisplays() }
+    }
+    func openDockDoor() {
+        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.ethanbills.DockDoor") else {
+            status = "DockDoor is not installed. Its source and install steps are linked in the project README."; return
+        }
+        let config = NSWorkspace.OpenConfiguration(); config.activates = true
+        NSWorkspace.shared.openApplication(at: url,configuration: config) { _,error in
+            if let error { Log.write("Could not open DockDoor: \(error.localizedDescription)") }
+        }
     }
     func previewLayout(_ layout: ScreenLayout) throws {
         guard running,previewSeconds == 0 else { throw HubError("Start the screens before changing their layout.") }
@@ -324,11 +334,10 @@ struct Controls: View {
                 Button("Arrange displays…") { model.onOpenLayout?() }.disabled(!model.running)
             }
             Divider()
-            Toggle("Show an app bar on every display",isOn: $model.showAppBars)
-            if model.showAppBars {
-                Text("A custom launcher with pinned and running apps. Apple’s Dock settings stay unchanged. Other apps may need resizing to leave room for the bar.")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
+            Text("Native macOS Dock").font(.headline)
+            Text("DockDoor adds click-to-minimize and window previews to Apple’s Dock. It runs as a separate app.")
+                .font(.caption).foregroundStyle(.secondary)
+            Button("Open DockDoor settings…") { model.openDockDoor() }.disabled(!model.hasDockDoor)
             Toggle("Keep maximized windows above the Dock", isOn: $model.fitWindows).disabled(!model.windowAccess)
             if !model.windowAccess {
                 Text("Window fitting needs Accessibility permission to resize windows in your chosen apps.").font(.caption).foregroundStyle(.secondary)
@@ -401,7 +410,7 @@ final class Delegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowD
         add("Identify displays",#selector(identifyScreens),enabled: model.running)
         add("Arrange displays…",#selector(openLayout),enabled: model.running)
         menu.addItem(.separator())
-        add("App bar on every display",#selector(toggleAppBars),checked: model.showAppBars)
+        add("Native Dock settings (DockDoor)…",#selector(openNativeDockSettings),enabled: model.hasDockDoor)
         add("Keep large windows above the Dock",#selector(toggleWindowFit),enabled: model.windowAccess,checked: model.fitWindows)
         menu.addItem(.separator())
         add("Settings…",#selector(openSettings))
@@ -413,7 +422,7 @@ final class Delegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowD
     @objc private func toggleScreens() { if model.running { model.stop() } else { model.start() } }
     @objc private func identifyScreens() { model.identifyDisplays() }
     @objc private func openLayout() { showLayout() }
-    @objc private func toggleAppBars() { model.showAppBars.toggle() }
+    @objc private func openNativeDockSettings() { model.openDockDoor() }
     @objc private func toggleWindowFit() { model.fitWindows.toggle() }
     @objc private func openSettings() { showControls() }
     @objc private func quitApp() { model.shutdown(); NSApp.terminate(nil) }
