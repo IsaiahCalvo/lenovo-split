@@ -6,10 +6,12 @@ let package = Package(
 	platforms: [.macOS(.v14)],
 	targets: [
         .target(name: "DisplayLayout"),
+        .target(name: "WindowFocus", dependencies: ["DisplayLayout"],swiftSettings: [.swiftLanguageMode(.v5)]),
+        .testTarget(name: "WindowFocusTests", dependencies: ["WindowFocus", "DisplayLayout"]),
         .testTarget(name: "DisplayLayoutTests", dependencies: ["DisplayLayout"]),
         .target(name: "LenovoDock", path: "Sources/LenovoDock", publicHeadersPath: "include", linkerSettings: [.linkedFramework("IOKit"), .linkedFramework("CoreFoundation")]),
 		.executableTarget(
-            name: "LenovoSplit", dependencies: ["VirtualDisplay", "LenovoDock", "DisplayLayout"], path: "Sources/LenovoSplit",
+            name: "LenovoSplit", dependencies: ["VirtualDisplay", "LenovoDock", "DisplayLayout", "WindowFocus"], path: "Sources/LenovoSplit",
             swiftSettings: [.swiftLanguageMode(.v5)],
             linkerSettings: [.linkedFramework("CoreGraphics"), .linkedFramework("ScreenCaptureKit"),
                             .linkedFramework("QuartzCore"), .linkedFramework("CoreMedia"), .linkedFramework("CoreVideo")]

@@ -7,3 +7,13 @@ There is no network client or analytics. Screen frames stay local. Accessibility
 Report issues privately through GitHub private vulnerability reporting if available. Do not attach credentials, raw I/O Registry dumps, monitor serials, screenshots of private windows or firmware images to public issues. If private reporting is unavailable, open a minimal issue asking for a private contact without disclosing the vulnerability or private data.
 
 Window recovery is separately configurable. With Accessibility, it reads and changes standard desktop window geometry for regular apps, remembers rectangles and process/window IDs in memory, and skips minimized/fullscreen windows. This access is wider than the two-app fitting allowlist, and supports the explicit all-app window-recovery feature. It does not log window titles or transmit data.
+
+Hover focus is optional and off by default. With Accessibility, it reads local
+window geometry and accessibility roles to focus and raise standard desktop
+windows under the pointer. It reads mouse position, held modifier flags and
+button state, and observes mouse clicks/drags/scrolls without blocking them.
+It does not read keystrokes or document contents, log window titles, warp the
+pointer or inject events. Process names/paths and known bundle IDs are checked
+locally for AutoRaise conflicts; no command arguments are collected or logged.
+The service never changes or stops another utility. Unknown renamed forks and
+other focus tools are not guaranteed to be detected.

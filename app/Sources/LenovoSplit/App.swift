@@ -3,6 +3,7 @@ import SwiftUI
 import Combine
 import LenovoDock
 import DisplayLayout
+import WindowFocus
 import Darwin
 
 struct HubError: Error, CustomStringConvertible, LocalizedError {
@@ -66,6 +67,20 @@ final class Model: ObservableObject {
             dockClickStarted = dockClick.isRunning
         }
     }
+    private let hoverRaise = HoverRaise()
+    @Published private(set) var hoverRaiseStatus = "Off"
+    @Published var hoverRaiseEnabled = UserDefaults.standard.bool(forKey: "hoverRaiseEnabled") {
+        didSet {
+            UserDefaults.standard.set(hoverRaiseEnabled,forKey: "hoverRaiseEnabled")
+            hoverRaise.setEnabled(hoverRaiseEnabled)
+        }
+    }
+    @Published var hoverRaiseDelay = UserDefaults.standard.object(forKey: "hoverRaiseDelay") as? Double ?? 0.5 {
+        didSet {
+            let safe = min(2,max(0.2,hoverRaiseDelay.isFinite ? hoverRaiseDelay : 0.5))
+            UserDefaults.standard.set(safe,forKey: "hoverRaiseDelay"); hoverRaise.delay = safe
+        }
+    }
     @Published private(set) var physicalOutputNames = ["Display 1", "Display 2"]
     var panelNames: [String] { PanelAssignment(outputNames: physicalOutputNames).panelNames(swapped: swap) }
     @Published private(set) var previewSeconds = 0
@@ -105,6 +120,10 @@ final class Model: ObservableObject {
         dockClickStarted = dockClick.isRunning
         windowRecovery.setEnabled(keepWindowsVisible && windowAccess)
         dockClick.recoverWindows = { [weak self] pid in self?.windowRecovery.revealIfNeeded(pid: pid) ?? false }
+        hoverRaise.delay = min(2,max(0.2,hoverRaiseDelay.isFinite ? hoverRaiseDelay : 0.5))
+        hoverRaise.onStatus = { [weak self] in self?.hoverRaiseStatus = $0 }
+        hoverRaise.isBlocked = { [weak self] in self == nil || self?.busy == true || (self?.previewSeconds ?? 0)>0 }
+        hoverRaise.setEnabled(hoverRaiseEnabled)
         monitor = DockMonitor { [weak self] in self?.dockChanged() }
     }
 
@@ -281,7 +300,7 @@ final class Model: ObservableObject {
         paused = true; stopInternal()
         status = "Stopped. Start again here, or reconnect the dock."
     }
-    func shutdown() { dockClick.setEnabled(false); stopInternal(); windowRecovery.setEnabled(false) }
+    func shutdown() { hoverRaise.setEnabled(false); dockClick.setEnabled(false); stopInternal(); windowRecovery.setEnabled(false) }
 
     private func updateRecoveryContext(restore: Bool) {
         var mapping: [CGDirectDisplayID:String] = [:]
@@ -349,7 +368,7 @@ final class Model: ObservableObject {
 struct Controls: View {
     @ObservedObject var model: Model
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        ScrollView { VStack(alignment: .leading, spacing: 14) {
             Text("Lenovo Split").font(.title2.bold())
             Text("Two separate screens through a ThinkPad 40AS").foregroundStyle(.secondary)
             Text(model.status).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
@@ -378,16 +397,29 @@ struct Controls: View {
             if model.dockClickToMinimize && !model.dockClickStarted {
                 Text("Dock clicks could not start. Check Accessibility permission, then retry below.").font(.caption).foregroundStyle(.orange)
             }
+            Divider()
+            Toggle("Raise windows on hover",isOn: $model.hoverRaiseEnabled)
+            if model.hoverRaiseEnabled {
+                Picker("Hover delay",selection: $model.hoverRaiseDelay) {
+                    Text("0.25 seconds").tag(0.25)
+                    Text("0.5 seconds").tag(0.5)
+                    Text("0.75 seconds").tag(0.75)
+                    Text("1 second").tag(1.0)
+                }
+                Text(model.hoverRaiseStatus).font(.caption).foregroundStyle(.secondary)
+            }
+            Text("Focus and raise a window after the pointer rests on it. Pauses while standalone AutoRaise runs. Hold Control to pause.")
+                .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false,vertical: true)
             Toggle("Keep maximized windows above the Dock", isOn: $model.fitWindows).disabled(!model.windowAccess)
             if !model.windowAccess {
-                Text("These optional features need Accessibility to minimize clicked apps or resize the chosen apps’ windows.").font(.caption).foregroundStyle(.secondary)
+                Text("These optional features need Accessibility to focus, minimize or resize windows.").font(.caption).foregroundStyle(.secondary)
                 Button("Allow Accessibility…") { model.requestWindowAccess() }
             }
             Button("Check Accessibility permission") { model.refreshWindowAccess() }
             Text("Protected video may appear black. Window fitting applies only to Claude and Grok Bot.")
                 .font(.caption).foregroundStyle(.secondary)
             Button("Quit") { model.shutdown(); NSApp.terminate(nil) }
-        }.padding(20).frame(width: 410)
+        }.padding(20) }.frame(width: 450,height: 700)
     }
 }
 
@@ -453,6 +485,8 @@ final class Delegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowD
         add("Recover windows now",#selector(recoverWindows),enabled: model.windowAccess && model.keepWindowsVisible)
         menu.addItem(.separator())
         add("Click active Dock icon to minimize",#selector(toggleDockClick),enabled: model.windowAccess,checked: model.dockClickToMinimize)
+        add("Raise windows on hover",#selector(toggleHoverRaise),checked: model.hoverRaiseEnabled)
+        if model.hoverRaiseEnabled { add(model.hoverRaiseStatus,nil,enabled: false) }
         add("Keep large windows above the Dock",#selector(toggleWindowFit),enabled: model.windowAccess,checked: model.fitWindows)
         menu.addItem(.separator())
         add("Settings…",#selector(openSettings))
@@ -467,6 +501,7 @@ final class Delegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowD
     @objc private func toggleDockClick() { model.dockClickToMinimize.toggle() }
     @objc private func toggleWindowRecovery() { model.keepWindowsVisible.toggle() }
     @objc private func recoverWindows() { model.recoverWindowsNow() }
+    @objc private func toggleHoverRaise() { model.hoverRaiseEnabled.toggle() }
     @objc private func toggleWindowFit() { model.fitWindows.toggle() }
     @objc private func openSettings() { showControls() }
     @objc private func quitApp() { model.shutdown(); NSApp.terminate(nil) }

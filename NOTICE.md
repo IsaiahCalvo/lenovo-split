@@ -25,6 +25,14 @@ notice and copyright are retained in LICENSE and in the installed app bundle.
 The adapted service is compiled into Lenovo Split; it does not call or require
 the Light Stats app, DockDoor, or Vorssaint. No GPL code from those apps is bundled.
 
+## AutoRaise
+
+[AutoRaise](https://github.com/sbmpost/AutoRaise), by sbmpost, is licensed under
+GPL-3.0 and inspired the hover-to-focus/raise feature. Lenovo Split implements
+that behaviour independently in Swift. No AutoRaise source, executable, icon,
+configuration, or launch agent is included or required. Its upstream app
+identifiers and process names are used only to avoid running two focus handlers.
+
 ## fwupd
 
 The dock and MST hub protocol in `app/Sources/DockCore` (HID-to-I2C bridge

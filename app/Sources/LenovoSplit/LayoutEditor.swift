@@ -38,8 +38,6 @@ struct LayoutEditor: View {
                 }
                 Button("Save names") { model.savePanelNames(names); message = "Names saved for these physical outputs." }
             }
-            Toggle("Swap which physical monitor shows display 1 and 2",isOn: $model.swap)
-                .disabled(model.previewSeconds > 0 || !model.running)
             Text("Use Identify to match the numbers to your monitors. Names are labels you choose; the dock may hide each monitor’s own name.")
                 .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false,vertical: true)
             if !message.isEmpty { Text(message).font(.callout).fixedSize(horizontal: false,vertical: true) }

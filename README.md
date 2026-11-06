@@ -21,8 +21,9 @@ The code targets macOS 14+, but earlier OS releases and other Mac/dock/monitor c
 - Menu-bar controls that dismiss on an outside click; no app icon in the Dock.
 - **Window recovery:** remember visible window positions during a split session and before unplug; restore surviving windows to the same physical output after reconnect. Windows stranded on the hidden transport are moved onto a usable screen on activation, reconnect, or **Recover windows now**. Recovery needs Accessibility and falls back to a visible screen when no saved position is available.
 - **Identify displays:** temporary numbers on each usable screen.
-- **Arrange displays:** drag rectangles into any row order without renumbering, snap edges, label monitors, swap physical halves, and keep/revert a preview. Unconfirmed layouts revert after 15 seconds; confirmed layouts persist across reconnects.
+- **Arrange displays:** drag rectangles into any row order without renumbering, snap edges, label monitors, and keep/revert a preview. Unconfirmed layouts revert after 15 seconds; confirmed layouts persist across reconnects.
 - Built-in **click-to-minimize on Apple’s native Dock**. Click an active app’s icon to minimize its standard desktop windows; click again to restore the set. No DockDoor, Vorssaint, Light Stats or other companion app is needed. No replacement app bars are drawn.
+- Optional **raise windows on hover**, off by default, with a configurable delay. It pauses while standalone AutoRaise is running, during clicks/drags/modifier keys, and while arranging displays. No companion app is required.
 - Optional window fitting for **Claude and Grok Bot only**, with a separate Accessibility permission. Smaller, tiled, minimized and true fullscreen windows are left alone.
 
 ## Build and install
@@ -58,8 +59,8 @@ The build uses the first local Apple Development identity, when present, to help
 1. Connect both monitors to the dock. On a monitor shared with another computer, select the input wired to this dock. The app deliberately does **not** force a monitor away from its other input.
 2. Open Lenovo Split. Grant Screen Recording when requested; then start the screens. On newer macOS releases the OS may rename permission groups.
 3. Click **Identify displays**. Numbers 1 and 2 identify the virtual panels; 3 identifies the built-in display when present.
-4. Open **Arrange displays**. If the physical monitors have the numbers reversed, use **Swap which physical monitor shows display 1 and 2**. Then drag the rectangles to match the desk and select **Apply layout → Keep layout**.
-5. Give the monitors names if desired. Names are stored against the physical output halves, so toggling Swap updates the names in Arrange and Identify immediately. The virtual screens in macOS use stable names `Lenovo Split 1` and `Lenovo Split 2`. The app does not pretend it can always retrieve both physical monitor names through the combined signal.
+4. Open **Arrange displays**. Drag the numbered rectangles into the order of your desk, then select **Apply layout → Keep layout**.
+5. Give the monitors names if desired. Names stay attached to their physical outputs. The old Swap control has been removed; existing saved output mapping is preserved. The virtual screens in macOS use stable names `Lenovo Split 1` and `Lenovo Split 2`. The app does not pretend it can always retrieve both physical monitor names through the combined signal.
 6. Enable **Keep windows on visible screens** with Accessibility permission to recover windows after reconnect. Then optionally enable **Click an active app’s Dock icon to minimize**. It uses Lenovo Split’s Accessibility grant and acts on the app icon you click. Disable the same click action in any other Dock utility to avoid duplicate handlers. Window fitting is a separate opt-in feature.
 
 The built-in display remains the main screen while present. The hidden wide transport output is deliberately excluded from the editor. Arrange the usable displays in Lenovo Split rather than moving its hidden output in System Settings.
@@ -87,6 +88,35 @@ implementation, with the copyright and license retained. There is no runtime
 link to that application. The feature does not draw, replace, skin or inject
 code into the Dock. It also does not duplicate Apple’s native Dock on all
 screens simultaneously.
+
+## Hover focus and AutoRaise
+
+**Raise windows on hover** is a separate preference, off by default. After the
+pointer moves and rests on an ordinary window, Lenovo Split focuses and raises
+it after the selected delay (default 0.5 seconds). Hold Control to pause. It
+skips minimized/fullscreen windows, modal dialogs, menus, Dock previews, the
+hidden transport, and Lenovo Split itself. It requires fresh pointer movement
+after clicks, scrolling, app switches or Space changes. It does not move the
+pointer or synthesize clicks. This is the core hover behaviour, not a full copy
+of AutoRaise's command-line options or pointer-warp features.
+
+The built-in service checks current-user executable names and the known bundle
+identities of [AutoRaise](https://github.com/sbmpost/AutoRaise) and its menu-bar
+app. It checks again before each raise and shows **Paused — standalone AutoRaise
+is running** when a known instance is found. It resumes after that app exits
+and the pointer moves again. Failed process enumeration also pauses the feature.
+An installed but stopped AutoRaise does not conflict. Lenovo Split never edits
+its files, preferences or launch entries, and never stops or starts it.
+
+Detection cannot guarantee compatibility with every renamed fork or other
+focus utility. Leave one focus handler enabled at a time; the toggle is also
+available directly in Split's menu. Turning it off removes its event monitors
+and cancels queued raises. Accessibility does not grant permission automatically.
+
+AutoRaise is GPL-3.0. This service is an independent Swift implementation of
+hover-to-focus/raise; none of AutoRaise's source or binaries are bundled. Lenovo
+Split remains MIT licensed, and the full implementation and tests are in this
+repository for users to change.
 
 ## How it works
 
