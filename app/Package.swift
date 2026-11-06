@@ -5,6 +5,15 @@ let package = Package(
 	name: "WD19Split",
 	platforms: [.macOS(.v14)],
 	targets: [
+        .target(name: "DisplayLayout"),
+        .testTarget(name: "DisplayLayoutTests", dependencies: ["DisplayLayout"]),
+        .target(name: "LenovoDock", path: "Sources/LenovoDock", publicHeadersPath: "include", linkerSettings: [.linkedFramework("IOKit"), .linkedFramework("CoreFoundation")]),
+		.executableTarget(
+            name: "LenovoSplit", dependencies: ["VirtualDisplay", "LenovoDock", "DisplayLayout"], path: "Sources/LenovoSplit",
+            swiftSettings: [.swiftLanguageMode(.v5)],
+            linkerSettings: [.linkedFramework("CoreGraphics"), .linkedFramework("ScreenCaptureKit"),
+                            .linkedFramework("QuartzCore"), .linkedFramework("CoreMedia"), .linkedFramework("CoreVideo")]
+        ),
 		.target(
 			name: "DockCore",
 			path: "Sources/DockCore",

@@ -1,170 +1,114 @@
-# WD19 Split
+# Lenovo Split
 
-**Two external monitors on a Mac that only supports one, through a Dell WD19 dock.**
+Two independent 1920 × 1080 desktops through a Lenovo ThinkPad USB-C Dock Gen 2 (40AS), alongside an open MacBook display.
 
-Base Apple silicon chips (M1, M2, …) have a single display engine for external
-screens, and macOS doesn't do DisplayPort MST. A Dell WD19 on those Macs just
-mirrors the same picture to every monitor. WD19 Split fixes that without
-drivers, kernel extensions or firmware changes:
+An experimental, community-built macOS app. **Not a Lenovo product or an official Lenovo solution.** Based on [WD19 Split](https://github.com/kksimp/wd19-split), with a separate backend for the Lenovo dock.
 
-- the Mac sends **one wide picture** (e.g. 3840×1080), which it can do;
-- the dock's own Synaptics VMM5331 hub **splits it** across its two outputs,
-  using a display mode the hub already supports (ViewXpand) but that Dell
-  ships switched off;
-- optionally, the app presents the two halves to macOS as **two separate
-  displays**, each with its own Dock, menu bar, full-screen space and window
-  snapping.
+## Tested setup
 
-It is a small menu bar app plus a command-line tool, written in Swift and C.
+- Base M3 MacBook Pro, lid open, macOS 27.2.
+- ThinkPad USB-C Dock Gen 2 **40AS**, USB ID `17ef:a38f`.
+- Synaptics **VMM5322**, firmware **5.05.006**, matching configuration signature.
+- Two 1080p monitors, both run at **60 Hz**. Tested panels: ViewSonic VA2446 and Philips 278E9Q.
 
-## Layouts
+The code targets macOS 14+, but earlier OS releases and other Mac/dock/monitor combinations are **unverified**. It refuses other hub firmware/configurations. This is not a general MST driver, and does not enable arbitrary resolutions or dock models.
 
-| Layout | What macOS sees | Notes |
-|---|---|---|
-| **Mirror** | one monitor, copied to both screens | Dell's default |
-| **Ultrawide** | one 3840×1080 display spanning both screens | zero added latency; works with protected video; left/right order is fixed by the dock (see below) |
-| **Two displays** | two separate 1920×1080 displays | one frame of latency; **Swap sides** toggle; protected video shows black (by design) |
+## Features
 
-**Swapping sides.** In **Ultrawide**, the dock decides which monitor gets the
-left half and which gets the right, based on the port each one is plugged
-into. The only way to swap them in this layout is to **swap the monitor cables
-at the dock**. (On the WD19 that can mean swapping an HDMI and a DisplayPort
-monitor, so you may need a matching cable or adapter.) **Two displays** has a
-software **Swap sides** toggle instead.
+- Two virtual extended displays, each with its own fullscreen Space, drawn onto the two halves of the dock output.
+- Starts when the dock connects; continues waiting if the second monitor selects its dock input later.
+- Checks dock state and recovers after output changes. No firmware flashing.
+- Menu-bar controls that dismiss on an outside click; no app icon in the Dock.
+- **Identify displays:** temporary numbers on each usable screen.
+- **Arrange displays:** drag rectangles, snap edges, label monitors, swap physical halves, and keep/revert a preview. Unconfirmed layouts revert after 15 seconds; confirmed layouts persist across reconnects.
+- Optional **app bar on every display** with pinned Dock apps and running apps. This is a custom launcher, not a copy of Apple's Dock. It does not provide native Dock stacks, Trash, window thumbnails, or change macOS Dock settings. Windows may need resizing to leave space for it.
+- Optional window fitting for **Claude and Grok Bot only**, with a separate Accessibility permission. Smaller, tiled, minimized and true fullscreen windows are left alone.
 
-Every layout change shows a **Keep / Revert** prompt that reverts on its own
-after 15 seconds, like System Settings does for resolution changes.
+## Build and install
 
-## Requirements
+Requires Xcode/Swift 6 command-line tools and Python 3 for the install helper. No paid dependency, driver, kernel extension, or external Swift package is required.
 
-- A Mac on macOS 14 or later (developed on an M2 MacBook Pro, macOS 27).
-- A Dell **WD19** (Salomon family) whose MST hub runs firmware **05.06.03**.
-  The app checks the dock type, the hub firmware version and the hub's memory
-  layout, and refuses anything it hasn't been verified against.
-- Two monitors on the dock. Identical panels work best: the hub combines them
-  side by side, and the combined width must stay under 4096 pixels.
-- Xcode command-line tools (Swift 6) to build.
-
-Other WD19 hub firmware versions, the WD22 and the newer WD25 family use
-different hub chips or layouts and are not supported.
-
-## Build and run
-
-```bash
-git clone https://github.com/kksimp/wd19-split.git
-cd wd19-split
-scripts/install_hooks.sh     # optional: secret-scan hooks for contributors
-app/build_app.sh             # -> app/dist/WD19 Split.app and app/dist/dockctl
-open "app/dist/WD19 Split.app"
+```sh
+git clone https://github.com/IsaiahCalvo/lenovo-split.git
+cd lenovo-split
+./script/build_and_run.sh --build-only
+./script/install.sh
 ```
 
-`build_app.sh` signs with your first "Apple Development" identity if you have
-one (so macOS privacy permissions survive rebuilds), otherwise ad-hoc. Set
-`SIGN_ID` to choose another.
+The install script copies the app to `~/Applications/Lenovo Split.app` and writes `~/Library/LaunchAgents/local.lenovosplit.plist`.
 
-## Using it
+To start at login and watch future dock connections:
 
-1. Open **WD19 Split**. Its window (and the menu bar icon, if macOS shows it)
-   lists the dock, hub firmware and connected monitors.
-2. Pick **Ultrawide** or **Two displays**.
-3. The first time after the dock powers up, the window may ask you to **unplug
-   one monitor at the dock and plug it back in**. The hub only rebuilds the
-   display description it gives the Mac when a monitor is plugged in.
-4. **Two displays** asks once for **Screen Recording** permission (System
-   Settings → Privacy & Security → Screen & System Audio Recording). That is
-   how it draws the two virtual displays onto the real signal.
-5. **Restore Dell defaults** puts the dock back to mirroring.
+```sh
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/local.lenovosplit.plist
+open -a "$HOME/Applications/Lenovo Split.app"
+```
 
-Settings: open at login, re-apply your layout whenever the dock connects, and
-HiDPI for the ultrawide layout.
+If the login entry is already loaded after rebuilding, quit the running app before installing, then use:
 
-## What it changes — and what it never does
+```sh
+launchctl kickstart gui/$(id -u)/local.lenovosplit
+```
 
-- **Changes:** one byte in the hub's RAM (upstream display mode at `0x1740`:
-  `3` = Dell's mirror, `2` = split) and your Mac's display configuration.
-  Unplugging the dock's power restores Dell's defaults completely.
-- **Never:** writes the dock's firmware or flash, touches the hub's encrypted
-  security / HDCP region, or disables or works around HDCP or any other
-  content protection.
-- Every hub write in the code goes through a single allowlisted function
-  (`dc_mst_set_edid_mode` in `app/Sources/DockCore`).
-- The two-display layout uses macOS's standard ScreenCaptureKit, which leaves
-  protected content black. Use Ultrawide for streaming video.
-- If the app quits or crashes, macOS removes its virtual displays by itself
-  and the screens fall back to the ultrawide desktop.
+The build uses the first local Apple Development identity, when present, to help preserve macOS permissions across rebuilds; otherwise it signs ad hoc. Override with `SIGN_ID=-` or a signing identity of your choice. It does not export certificates or keys. No notarized binary is provided: build from source.
+
+## First setup
+
+1. Connect both monitors to the dock. On a monitor shared with another computer, select the input wired to this dock. The app deliberately does **not** force a monitor away from its other input.
+2. Open Lenovo Split. Grant Screen Recording when requested; then start the screens. On newer macOS releases the OS may rename permission groups.
+3. Click **Identify displays**. Numbers 1 and 2 identify the virtual panels; 3 identifies the built-in display when present.
+4. Open **Arrange displays**. If the physical monitors have the numbers reversed, use **Swap which physical monitor shows display 1 and 2**. Then drag the rectangles to match the desk and select **Apply layout → Keep layout**.
+5. Give the screens names if desired. The names shown in macOS update on the next split startup. The app can identify its own virtual panels reliably; it does not pretend it can always retrieve both physical monitors' names through the combined signal.
+6. Optional: turn on the app bars. Optional: grant Accessibility for window fitting. These are separate features.
+
+The built-in display remains the main screen while present. The hidden wide transport output is deliberately excluded from the editor. Arrange the usable displays in Lenovo Split rather than moving its hidden output in System Settings.
+
+## Shared monitor inputs and recovery
+
+A monitor set to HDMI from another computer may stop advertising its DisplayPort connection to the dock. The app cannot draw on that panel until it selects the dock input. It keeps retrying with backoff rather than giving up after a fixed short window, and watches USB, display and wake events. A low-frequency check also detects dock mode/output changes and capture errors. Two unhealthy checks precede a restart to avoid rebuilding for a brief transition.
+
+Health checks do not rewrite the split mode or refresh the host EDID. Those changes happen only when preparing a split. Hardware input switching and sleep/wake must still be tested for each setup; the current hardware support list is intentionally narrow.
 
 ## How it works
 
-```
-Mac (one external display engine)
-  └─ USB-C, DisplayPort alt mode, single stream ──► WD19 dock
-                                                     └─ Synaptics VMM5331 MST hub
-                                                          ├─ left half  ──► monitor 1
-                                                          └─ right half ──► monitor 2
-```
+The Mac sends one 3840 × 1080 stream. The dock's existing split function sends a 1920 × 1080 half to each monitor. Two `CGVirtualDisplay` desktops are captured with ScreenCaptureKit and drawn onto those halves. The physical wide output is parked beside the usable desktops and excluded from normal pointer travel.
 
-- **Talking to the dock.** The dock exposes a vendor HID device
-  (`413c:b06e`, the RTS5487 hub's HID-to-I2C bridge). Through it the app
-  reaches the dock's embedded controller and the MST hub, using the protocol
-  documented by [fwupd](https://github.com/fwupd/fwupd)'s `dell-dock` plugin.
-  This is ordinary userspace IOKit HID: no driver, no SIP changes.
-- **The switch.** The hub copies its config block to RAM at boot. Its EDID
-  builder reads the low nibble of `0x1740`: mode 3 passes the first monitor's
-  EDID through (mirror), mode 2 builds a combined timing of
-  `monitor width × number of monitors` and splits the video accordingly.
-- **The Mac side.** macOS hides the unscaled 3840×1080 mode from its public
-  API; the app selects it through the same window-server mode table System
-  Settings uses. For two displays it creates two `CGVirtualDisplay`s, captures
-  them with ScreenCaptureKit, draws them side by side on a borderless overlay
-  covering the real display, keeps the pointer on the virtual panels, and
-  parks the real display where it doesn't steal the Dock or menu bar.
+The Lenovo backend uses macOS's private DisplayPort APIs to reach the Synaptics remote-control mailbox. It checks the USB device, chip, firmware, configuration signature and port widths before changing **one byte in volatile hub RAM at `0x1740`** from mode 3 to mode 2. It then verifies the value. No firmware, flash, HDCP, encrypted security region, or SIP setting is changed.
 
-The full reverse-engineering notes (flash layout, MCS-251 source-mode
-disassembly, the EDID builder, live verification) are in
-[`research/PHASE1_FINDINGS.md`](research/PHASE1_FINDINGS.md). Firmware images,
-dumps and disassembly output are deliberately **not** in this repository; the
-Ghidra scripts and tools to reproduce them from Dell's public firmware are.
+When needed after reconnect, a temporary **Mac-side EDID override** adds the measured 3840 × 1080 @ 60 Hz timing. It does not alter a monitor's stored EDID or dock firmware. The private mode table selects the wide mode. OS updates can break these private APIs.
 
-## Command-line tool
+## Limits and privacy
 
-```bash
-app/dist/dockctl info              # dock model, versions
-app/dist/dockctl mst-status        # hub bootloader status, active bank
-app/dist/dockctl mst-mem 0x1740 4  # read hub RAM
-app/dist/dockctl mst-poke 0x1740 2 # the one write: 2 = split, 3 = Dell default
+- Screen Recording is needed for rendering; screen frames stay on this Mac. The app has no networking, analytics, account, or remote logging.
+- Protected video may be black. The app respects macOS content protection.
+- Capture adds latency and CPU/GPU work; this is not direct native scanout of two independent streams.
+- The app bars read local app names, icons and Dock-pinned app URLs. Clicking an icon asks macOS to open/activate the app. They do not inspect other app contents or list individual windows.
+- Optional window fitting queries geometry only for the two allowlisted apps. It does not grant the app permission by itself or enlarge the allowlist automatically.
+- Layouts, monitor labels and preferences stay in the local user preferences. Logs contain state and geometry, not screen images or chat contents. Review logs before sharing.
+- Quitting removes the virtual displays and restores saved physical display positions when those displays remain online. The volatile dock split can remain until the dock resets; stop is not a firmware/default reset.
+- Source includes no device dumps, personal preference files, certificates, credentials, compiled apps, vendor firmware or disassembly.
+
+## Develop and test
+
+```sh
+cd app
+swift test -c release
+cd ..
+./script/build_and_run.sh --build-only
 ```
 
-## Troubleshooting
+Layout tests check overlap, reachability, snapping, coordinate normalization and persistence. They do not prove hardware compatibility. See [CONTRIBUTING.md](CONTRIBUTING.md) for the manual hardware checks.
 
-- **Log:** `~/Library/Logs/WD19Split.log` records every step of a layout change.
-- **Self-test:** `open -n "app/dist/WD19 Split.app" --args --selftest-two 15`
-  turns the two-display layout on for 15 s without prompts, checks frames,
-  pointer guard and Dock placement, writes pictures next to the log, then
-  undoes everything.
-- **No menu bar icon:** macOS hides menu bar items when the bar is full or the
-  app isn't allowed there; opening the app again always shows its window.
-- **Clicking the desktop hides all windows:** that's macOS's "Click wallpaper
-  to reveal desktop" (System Settings → Desktop & Dock → set it to
-  "Only in Stage Manager").
-- **Don't run Dell's dock firmware updater** if you want to keep using this:
-  a new hub firmware version is refused until it has been verified.
+The upstream Dell targets remain in the source tree for attribution and reference; Lenovo Split does not call their backend. [NOTICE.md](NOTICE.md) lists upstream credit and license details.
 
-## Project layout
+## Uninstall
 
-```
-app/Sources/DockCore       C library: HID bridge, dock EC and MST hub access
-app/Sources/dockctl        command-line tool
-app/Sources/WD19Split      SwiftUI app: hub control, display modes, two-display layout
-app/Sources/VirtualDisplay declarations for CoreGraphics' virtual display classes
-research/                  findings, Ghidra scripts, firmware-package extractor
-scripts/                   secret scan and git hooks
+```sh
+./script/uninstall.sh
 ```
 
-## Credits and disclaimer
+This stops the app, removes its login entry and installed bundle, and leaves preferences available for a later reinstall. It does not flash/reset the dock or change monitor input selection. macOS privacy grants can be removed in System Settings.
 
-The dock and hub protocol follows fwupd's `dell-dock` plugin (see
-[NOTICE.md](NOTICE.md)). This is an independent interoperability project, not
-affiliated with or endorsed by Dell, Synaptics or Apple. Use at your own risk;
-it only changes volatile settings, and a dock power cycle undoes them.
+## License
 
-Licensed under the [MIT License](LICENSE).
+[MIT](LICENSE). Original WD19 Split copyright is retained. Lenovo, ThinkPad, ViewSonic, Philips, Apple and Synaptics names describe compatibility; this project is not affiliated with those companies.

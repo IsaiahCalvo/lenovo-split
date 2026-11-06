@@ -1,5 +1,13 @@
 # Notices
 
+## WD19 Split
+
+Lenovo Split is derived from [WD19 Split](https://github.com/kksimp/wd19-split),
+Copyright (c) 2026 kksimp, licensed under MIT. The virtual-display bridge,
+mode-table access, screen-capture renderer and some build structure derive
+from that project. Its copyright and MIT license are retained. The Lenovo
+DisplayPort backend and new setup/recovery controls are additions.
+
 ## fwupd
 
 The dock and MST hub protocol in `app/Sources/DockCore` (HID-to-I2C bridge
@@ -16,6 +24,8 @@ under the MIT option.
 
 ## Trademarks
 
+Lenovo and ThinkPad are trademarks of Lenovo. ViewSonic and Philips names
+are used only to describe tested panels. This is not a Lenovo-supported product.
 Dell and WD19 are trademarks of Dell Inc. Synaptics and ViewXpand are
 trademarks of Synaptics Incorporated. Apple, Mac and macOS are trademarks of
 Apple Inc. They are used here only to describe compatibility.

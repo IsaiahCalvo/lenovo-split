@@ -1,13 +1,12 @@
-# WD19 Split — app
+# App source
 
-See the [top-level README](../README.md) for what this does, requirements and
-safety boundaries.
+See the root [README](../README.md) for Lenovo Split setup and limits.
 
-- `build_app.sh` builds `dist/WD19 Split.app` and `dist/dockctl` (release),
-  signing with your first Apple Development identity or `SIGN_ID`.
-- `Sources/DockCore` — C library: HID bridge, dock EC and MST hub access.
-  The only hub write is `dc_mst_set_edid_mode` (hub RAM `0x1740`).
-- `Sources/dockctl` — command-line tool on top of DockCore.
-- `Sources/WD19Split` — SwiftUI app (hub controller, display modes,
-  two-display layout, self-test via `--selftest-two N`).
-- `Sources/VirtualDisplay` — declarations for CoreGraphics' virtual displays.
+- `Sources/LenovoDock`: verified ThinkPad 40AS DisplayPort mailbox backend.
+- `Sources/LenovoSplit`: app lifecycle, recovery, capture, layout editor, identification, app bars and optional window fitting.
+- `Sources/DisplayLayout`: pure layout model and placement validation.
+- `Tests/DisplayLayoutTests`: geometry and persistence tests.
+- `Sources/VirtualDisplay`: upstream private macOS virtual-display bridge.
+- `Sources/WD19Split`, `DockCore`, `dockctl`: original Dell-specific targets, retained for reference. Not called by Lenovo Split.
+
+Build the installable bundle with `../script/build_and_run.sh --build-only`; using `swift run` alone does not provide the stable app identity used for privacy permissions.

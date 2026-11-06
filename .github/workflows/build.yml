@@ -1,0 +1,20 @@
+name: Build and test
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test layout rules
+        working-directory: app
+        run: swift test -c release
+      - name: Build app bundle
+        env:
+          SIGN_ID: '-'
+        run: ./script/build_and_run.sh --build-only
+      - name: Verify signature
+        run: codesign --verify --strict 'dist/Lenovo Split.next.app'
