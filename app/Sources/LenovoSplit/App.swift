@@ -341,16 +341,13 @@ struct Controls: View {
 }
 
 @MainActor
-final class Delegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSWindowDelegate {
+final class Delegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDelegate {
     let model = Model()
     var window: NSWindow?
     private var statusItem: NSStatusItem?
-    private let popover = NSPopover()
+    private let menu = NSMenu()
     private var statusSubscription: AnyCancellable?
     private var layoutWindow: NSWindow?
-    private var outsideClick: Any?
-    private var localClick: Any?
-    private var resignObserver: NSObjectProtocol?
     private var menuPreview: AnyCancellable?
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -363,16 +360,11 @@ final class Delegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSWind
             button.title = "Split"
             button.image = NSImage(systemSymbolName: "rectangle.split.2x1", accessibilityDescription: "Lenovo Split")
             button.imagePosition = .imageLeading
-            button.target = self; button.action = #selector(togglePopover)
         }
         statusItem = item
-        popover.behavior = .transient
-        popover.delegate = self
-        popover.contentViewController = NSHostingController(rootView: Controls(model: model))
+        menu.delegate = self; menu.autoenablesItems = false
+        item.menu = menu
         model.onOpenLayout = { [weak self] in self?.showLayout() }
-        resignObserver = NotificationCenter.default.addObserver(forName: NSApplication.didResignActiveNotification,object: NSApp,queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.popover.performClose(nil) }
-        }
         statusSubscription = model.$status.sink { [weak self] text in self?.statusItem?.button?.toolTip = "Lenovo Split: " + text }
         Log.write("status item created visible=\(item.isVisible) button=\(item.button != nil)")
         Log.write("launched menu-bar-only=true autoConnect=\(model.autoConnect) permission=\(model.permission) windowAccess=\(model.windowAccess)")
@@ -381,44 +373,46 @@ final class Delegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSWind
         // relying on the position of a status item hidden by a camera notch.
         if CommandLine.arguments.contains("--show-menu") {
             menuPreview = model.$running.filter { $0 }.first().sink { [weak self] _ in
-                DispatchQueue.main.async { self?.togglePopover() }
+                DispatchQueue.main.async { self?.statusItem?.button?.performClick(nil) }
             }
         }
     }
-    @objc func togglePopover() {
-        guard let button = statusItem?.button else { return }
-        if popover.isShown { popover.performClose(nil) }
-        else {
-            NSApp.activate(ignoringOtherApps: true)
-            popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
-            popover.contentViewController?.view.window?.makeKey()
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        menu.removeAllItems()
+        func add(_ title: String,_ action: Selector?,enabled: Bool = true,checked: Bool? = nil) {
+            let item = NSMenuItem(title: title,action: action,keyEquivalent: "")
+            item.target = self; item.isEnabled = enabled
+            if let checked { item.state = checked ? .on : .off }
+            menu.addItem(item)
         }
+        let state = model.running ? "Two separate displays connected" :
+            (model.busy ? "Starting screens…" : (model.connected ? "Waiting for both dock outputs" : "Dock disconnected"))
+        add(state,nil,enabled: false)
+        menu.addItem(.separator())
+        add("Start when this dock connects",#selector(toggleAutoConnect),checked: model.autoConnect)
+        add(model.running ? "Stop screens" : "Start screens",#selector(toggleScreens),enabled: !model.busy)
+        menu.addItem(.separator())
+        add("Identify displays",#selector(identifyScreens),enabled: model.running)
+        add("Arrange displays…",#selector(openLayout),enabled: model.running)
+        menu.addItem(.separator())
+        add("App bar on every display",#selector(toggleAppBars),checked: model.showAppBars)
+        add("Keep large windows above the Dock",#selector(toggleWindowFit),enabled: model.windowAccess,checked: model.fitWindows)
+        menu.addItem(.separator())
+        add("Settings…",#selector(openSettings))
+        add("Quit Lenovo Split",#selector(quitApp))
     }
-    func popoverDidShow(_ notification: Notification) {
-        stopClickMonitors()
-        // Clicks only, installed only while the panel is open. Never record
-        // event data or intercept input to another app.
-        outsideClick = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown,.rightMouseDown]) { [weak self] _ in
-            self?.popover.performClose(nil)
-        }
-        localClick = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown,.rightMouseDown]) { [weak self] event in
-            guard let self else { return event }
-            if event.window !== self.popover.contentViewController?.view.window && event.window !== self.statusItem?.button?.window {
-                self.popover.performClose(nil)
-            }
-            return event
-        }
-        Log.write("menu panel opened")
-    }
-    func popoverDidClose(_ notification: Notification) {
-        stopClickMonitors(); Log.write("menu panel closed")
-    }
-    private func stopClickMonitors() {
-        if let outsideClick { NSEvent.removeMonitor(outsideClick) }; outsideClick = nil
-        if let localClick { NSEvent.removeMonitor(localClick) }; localClick = nil
-    }
+    func menuWillOpen(_ menu: NSMenu) { Log.write("menu opened") }
+    func menuDidClose(_ menu: NSMenu) { Log.write("menu closed") }
+    @objc private func toggleAutoConnect() { model.autoConnect.toggle() }
+    @objc private func toggleScreens() { if model.running { model.stop() } else { model.start() } }
+    @objc private func identifyScreens() { model.identifyDisplays() }
+    @objc private func openLayout() { showLayout() }
+    @objc private func toggleAppBars() { model.showAppBars.toggle() }
+    @objc private func toggleWindowFit() { model.fitWindows.toggle() }
+    @objc private func openSettings() { showControls() }
+    @objc private func quitApp() { model.shutdown(); NSApp.terminate(nil) }
     private func showLayout() {
-        popover.performClose(nil)
+        menu.cancelTracking()
         if layoutWindow == nil {
             let window = NSWindow(contentViewController: NSHostingController(rootView: LayoutEditor(model: model)))
             window.title = "Arrange displays — Lenovo Split"
@@ -433,7 +427,7 @@ final class Delegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSWind
         if let closed = notification.object as? NSWindow,closed === layoutWindow { model.revertLayout() }
     }
     func showControls() {
-        popover.performClose(nil)
+        menu.cancelTracking()
         if window == nil {
             let w = NSWindow(contentViewController: NSHostingController(rootView: Controls(model: model)))
             w.title = "Lenovo Split"; w.styleMask = [.titled, .closable]
@@ -445,8 +439,7 @@ final class Delegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSWind
         showControls(); return true
     }
     func applicationWillTerminate(_ notification: Notification) {
-        stopClickMonitors()
-        if let resignObserver { NotificationCenter.default.removeObserver(resignObserver) }
+        menu.cancelTracking()
         model.shutdown()
     }
 }
