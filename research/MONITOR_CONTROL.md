@@ -79,3 +79,84 @@ input-priority setting, another verified control route, or cooperation from
 the currently active HDMI host would then be needed. None is assumed present.
 The full Philips OSD/input-priority behaviour and downstream MST DDC route
 remain open questions. No extra computer or hardware is assumed for this app.
+
+## Brightness and audio references (2026-11-06)
+
+This is an implementation assessment, not a shipped monitor-control feature.
+No live app, display layout, picture level, audio route or volume was changed.
+
+Reviewed sources:
+
+- [MonitorControl](https://github.com/MonitorControl/MonitorControl), commit
+  `7cfe64500d19cbbcbf82121a91c826f658a403bd`. MIT license; reuse requires retaining
+  its copyright and permission notice. Relevant files: `Model/Display.swift`
+  (gamma/shade dimming), `Model/OtherDisplay.swift` (monitor controls), and
+  `Support/Arm64DDC.swift` (Apple Silicon transport).
+- [Vorssaint](https://github.com/vorssaint/vorssaint-utils), reviewed checkout
+  `26d3c9e199eb3afc8f43ce8bd83210b5754421bd`. GPL-3.0-or-later. Relevant areas:
+  display brightness and fallback dimming; audio output selection, per-app
+  volume and routing. No GPL code has been copied into Lenovo Split.
+
+| Proposed control | Finding on this split design | Implementation status |
+| --- | --- | --- |
+| Separate image dimming | Each virtual desktop already has a separate captured image layer over a black background. Applying a factor to the final panel layer can dim each output independently. | Feasible from code inspection; not implemented or physically verified. |
+| True monitor backlight | Standard DDC luminance is VCP `0x10`. Requires a verified route to each physical monitor, not a virtual display ID. | Not established through this dock. |
+| Monitor speaker volume/mute | Standard controls include VCP `0x62` and `0x8D`; actual support and range must be verified per monitor. This controls the speaker level, not audio routing. | Not established through this dock. |
+| Audio output selection | Core Audio can list real output devices and choose among available routes. | Read-only inventory completed; no route changed. |
+| Independent sound to each monitor | Two virtual video displays do not create two audio devices. Requires separately addressable endpoints and actual audio paths to both speakers. | No separate Philips/ViewSonic endpoints found in this session. |
+| Per-app volume/routing | Vorssaint uses Core Audio process taps and aggregate-device/rendering infrastructure. This is a separate audio feature, not a monitor volume setting. | Research only; no taps, audio capture or aggregate devices created. |
+
+[DDC control definitions](https://www.ddcutil.com/vcpinfo_output/),
+[Apple Core Audio tap overview](https://developer.apple.com/documentation/coreaudio/capturing-system-audio-with-core-audio-taps).
+
+### Additional local evidence
+
+A read-only luminance request was made using MonitorControl's Get VCP packet
+framing and reply offset, independently of the earlier m1ddc-style input test.
+The write of the query packet returned `0xe0114000`; no valid luminance reply
+was obtained and no Set VCP command followed. This is a failure of the tested
+route, not proof that either monitor lacks a hardware brightness control.
+Speaker-volume access was not independently established.
+
+The Core Audio inventory showed the dock's USB audio output, but no separate
+Philips or ViewSonic output. That USB device exposed no standard scalar volume
+control at the master, left or right output elements queried. This does not
+establish that every possible device control is absent. Personal output-device
+names, identifiers and current levels are deliberately omitted from this note.
+
+The current temporary host EDID override contains only a 128-byte base block
+and sets the extension count to zero. It does not advertise a CTA audio block.
+That may contribute to the absence of a DisplayPort monitor-audio endpoint;
+the causal link and any valid audio capability/forwarding configuration remain
+unverified. Do not invent audio capabilities in the EDID to make a UI appear
+supported. The current capture streams forward video only.
+
+### Proposed first implementation
+
+1. Add optional **Image dimming** sliders for the two physical outputs. Default
+   to no dimming, and label this as software dimming rather than backlight or
+   power-saving control. It can reduce the rendered image level; it cannot
+   exceed the monitor's hardware brightness.
+2. Apply the adjustment in the existing compositor, not by changing the Mac's
+   global gamma tables. This avoids competing gamma writes with MonitorControl,
+   Vorssaint, Night Shift or calibration tools. Their own adjustments can still
+   combine with ours, so our dimming must remain optional and easy to reset.
+3. Store levels by the existing physical-output keys, not by transient display
+   IDs or left-to-right order. Reordering the desk must not swap brightness
+   values. Preserve the legacy output mapping.
+4. Remove all effects on stop/quit and restore only our own requested levels
+   after reconnect. Provide a clear reset to an undimmed image and avoid an
+   accidental fully black desktop.
+5. Add per-feature capability states before hardware controls: available,
+   software-only, not reachable, or not yet tested. Validate every DDC reply and
+   require verified monitor identity/port routing before enabling writes. A
+   successful API call alone is not proof of a changed backlight or volume.
+6. Keep keyboard/media-key interception off by default and avoid registering
+   duplicate handlers when another controller owns those keys. Never disable
+   another app or overwrite its settings. Per-device audio controls should be
+   shown only for real supported devices; a shared output must not masquerade
+   as two independently controlled monitor speakers.
+
+No MonitorControl runtime dependency is needed. Any future adapted MIT code
+must include its notices; Vorssaint remains a behavioural reference unless the
+project's licensing is explicitly changed.
