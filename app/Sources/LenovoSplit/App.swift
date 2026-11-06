@@ -38,6 +38,7 @@ final class Model: ObservableObject {
         didSet {
             controller.swapSides = swap; UserDefaults.standard.set(swap, forKey: "swap")
             if identifier.isShowing { identifyDisplays() }
+            updateRecoveryContext(restore: false); windowRecovery.remember(force: true)
         }
     }
     @Published var windowAccess = WindowFitter.trusted
@@ -48,9 +49,25 @@ final class Model: ObservableObject {
         }
     }
     private let fitter = WindowFitter()
+    private let windowRecovery = WindowRecovery()
+    @Published var keepWindowsVisible = UserDefaults.standard.object(forKey: "keepWindowsVisible") == nil ? true : UserDefaults.standard.bool(forKey: "keepWindowsVisible") {
+        didSet {
+            UserDefaults.standard.set(keepWindowsVisible,forKey: "keepWindowsVisible")
+            windowRecovery.setEnabled(keepWindowsVisible && windowAccess)
+            updateRecoveryContext(restore: running)
+        }
+    }
+    private let dockClick = NativeDockClick()
+    @Published private(set) var dockClickStarted = false
+    @Published var dockClickToMinimize = UserDefaults.standard.bool(forKey: "dockClickToMinimize") {
+        didSet {
+            UserDefaults.standard.set(dockClickToMinimize,forKey: "dockClickToMinimize")
+            dockClick.setEnabled(dockClickToMinimize && windowAccess)
+            dockClickStarted = dockClick.isRunning
+        }
+    }
     @Published private(set) var physicalOutputNames = ["Display 1", "Display 2"]
     var panelNames: [String] { PanelAssignment(outputNames: physicalOutputNames).panelNames(swapped: swap) }
-    var hasDockDoor: Bool { NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.ethanbills.DockDoor") != nil }
     @Published private(set) var previewSeconds = 0
     @Published private(set) var layoutVerified = false
     var onOpenLayout: (() -> Void)?
@@ -84,17 +101,24 @@ final class Model: ObservableObject {
         fitter.allowedBundleIDs = Set(UserDefaults.standard.stringArray(forKey: "fitAppIDs") ?? [])
         fitter.isRunning = { [weak self] in self?.running == true }
         fitter.setEnabled(fitWindows && windowAccess)
+        dockClick.setEnabled(dockClickToMinimize && windowAccess)
+        dockClickStarted = dockClick.isRunning
+        windowRecovery.setEnabled(keepWindowsVisible && windowAccess)
+        dockClick.recoverWindows = { [weak self] pid in self?.windowRecovery.revealIfNeeded(pid: pid) ?? false }
         monitor = DockMonitor { [weak self] in self?.dockChanged() }
     }
 
     func requestWindowAccess() {
         WindowFitter.requestPermission()
-        status = "Allow Accessibility for Lenovo Split, then choose Check window permission."
+        status = "Allow Accessibility for Lenovo Split, then choose Check Accessibility."
     }
     func refreshWindowAccess() {
         windowAccess = WindowFitter.trusted
         fitter.allowedBundleIDs = Set(UserDefaults.standard.stringArray(forKey: "fitAppIDs") ?? [])
         fitter.setEnabled(fitWindows && windowAccess)
+        dockClick.setEnabled(dockClickToMinimize && windowAccess)
+        dockClickStarted = dockClick.isRunning
+        windowRecovery.setEnabled(keepWindowsVisible && windowAccess)
     }
 
     func dockChanged() {
@@ -211,6 +235,7 @@ final class Model: ObservableObject {
         CGGetOnlineDisplayList(16, &ids, &count)
         originalOrigins = ids.prefix(Int(count)).map { ($0, CGDisplayBounds($0).origin) }
         busy = true; status = "Starting separate screens…"
+        windowRecovery.pause()
         let token = generation
         startTask = Task {
             do {
@@ -218,12 +243,14 @@ final class Model: ObservableObject {
                 try Task.checkCancellation()
                 guard token == generation else { return }
                 running = true; attempts = 0; healthFailures = 0
+                updateRecoveryContext(restore: true)
                 status = "Two separate screens connected."
                 scheduleCheck(after: 10)
                 Log.write("STARTED panels=\(controller.panelIDs) frames=\(controller.frameCounts)")
             } catch {
                 guard token == generation else { return }
                 controller.stop(); restoreOrigins()
+                updateRecoveryContext(restore: false)
                 status = "\(error)"; Log.write("START FAILED: \(error)"); retry()
             }
             if token == generation { busy = false }
@@ -242,22 +269,33 @@ final class Model: ObservableObject {
     }
 
     private func stopInternal() {
+        windowRecovery.remember(force: true)
         recoveryTimer?.invalidate(); recoveryTimer = nil
         previewTimer?.invalidate(); previewTimer = nil; previewSeconds = 0; previousLayout = nil; layoutVerified = false
         identifier.hide(); healthBusy = false
         generation += 1; startTask?.cancel(); startTask = nil
         controller.stop(); restoreOrigins(); running = false; busy = false
+        updateRecoveryContext(restore: false)
     }
     func stop() {
         paused = true; stopInternal()
         status = "Stopped. Start again here, or reconnect the dock."
     }
-    func shutdown() { stopInternal() }
+    func shutdown() { dockClick.setEnabled(false); stopInternal(); windowRecovery.setEnabled(false) }
+
+    private func updateRecoveryContext(restore: Bool) {
+        var mapping: [CGDirectDisplayID:String] = [:]
+        if running {
+            for (index,id) in controller.panelIDs.enumerated() { mapping[id] = "output\(swap ? 1-index : index)" }
+        }
+        windowRecovery.configure(hidden: running ? controller.physicalDisplayID : nil,panelKeys: mapping,restore: restore)
+    }
 
     func identifyDisplays() {
         guard running else { return }
         identifier.show(displays: controller.layoutDisplays,names: panelNames)
     }
+    func recoverWindowsNow() { windowRecovery.recover(pid: nil,restoreSaved: false) }
     func savePanelNames(_ names: [String]) {
         guard names.count == 2 else { return }
         let cleaned = names.enumerated().map { index,value in
@@ -268,20 +306,13 @@ final class Model: ObservableObject {
         UserDefaults.standard.set(physicalOutputNames,forKey: "physicalOutputNames")
         if identifier.isShowing { identifyDisplays() }
     }
-    func openDockDoor() {
-        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.ethanbills.DockDoor") else {
-            status = "DockDoor is not installed. Its source and install steps are linked in the project README."; return
-        }
-        let config = NSWorkspace.OpenConfiguration(); config.activates = true
-        NSWorkspace.shared.openApplication(at: url,configuration: config) { _,error in
-            if let error { Log.write("Could not open DockDoor: \(error.localizedDescription)") }
-        }
-    }
     func previewLayout(_ layout: ScreenLayout) throws {
         guard running,previewSeconds == 0 else { throw HubError("Start the screens before changing their layout.") }
         previousLayout = controller.layout
+        windowRecovery.pause()
         do { try controller.applyLayout(layout) }
-        catch { previousLayout = nil; throw error }
+        catch { previousLayout = nil; updateRecoveryContext(restore: false); throw error }
+        DispatchQueue.main.asyncAfter(deadline: .now()+0.5) { [weak self] in self?.updateRecoveryContext(restore: false) }
         previewSeconds = 15; layoutVerified = false
         let timer = Timer(timeInterval: 1,repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {
@@ -308,8 +339,10 @@ final class Model: ObservableObject {
         previewTimer?.invalidate(); previewTimer = nil; previewSeconds = 0
         let previous = previousLayout; previousLayout = nil
         guard running,let previous else { return }
+        windowRecovery.pause()
         do { try controller.applyLayout(previous) }
         catch { status = "Could not restore the layout. Choose Stop, then Start to use the saved layout." }
+        DispatchQueue.main.asyncAfter(deadline: .now()+0.5) { [weak self] in self?.updateRecoveryContext(restore: false) }
     }
 }
 
@@ -333,17 +366,24 @@ struct Controls: View {
                 Button("Identify displays") { model.identifyDisplays() }.disabled(!model.running)
                 Button("Arrange displays…") { model.onOpenLayout?() }.disabled(!model.running)
             }
+            Toggle("Keep windows on visible screens",isOn: $model.keepWindowsVisible).disabled(!model.windowAccess)
+            Text("Remember external window positions on unplug. Recover windows from the hidden output when reconnecting or opening an app.")
+                .font(.caption).foregroundStyle(.secondary)
+            Button("Recover windows now") { model.recoverWindowsNow() }.disabled(!model.keepWindowsVisible || !model.windowAccess)
             Divider()
             Text("Native macOS Dock").font(.headline)
-            Text("DockDoor adds click-to-minimize and window previews to Apple’s Dock. It runs as a separate app.")
+            Toggle("Click an active app’s Dock icon to minimize",isOn: $model.dockClickToMinimize).disabled(!model.windowAccess)
+            Text("Click again to restore its windows. Runs inside Lenovo Split and works with Apple’s Dock.")
                 .font(.caption).foregroundStyle(.secondary)
-            Button("Open DockDoor settings…") { model.openDockDoor() }.disabled(!model.hasDockDoor)
+            if model.dockClickToMinimize && !model.dockClickStarted {
+                Text("Dock clicks could not start. Check Accessibility permission, then retry below.").font(.caption).foregroundStyle(.orange)
+            }
             Toggle("Keep maximized windows above the Dock", isOn: $model.fitWindows).disabled(!model.windowAccess)
             if !model.windowAccess {
-                Text("Window fitting needs Accessibility permission to resize windows in your chosen apps.").font(.caption).foregroundStyle(.secondary)
-                Button("Allow window fitting…") { model.requestWindowAccess() }
+                Text("These optional features need Accessibility to minimize clicked apps or resize the chosen apps’ windows.").font(.caption).foregroundStyle(.secondary)
+                Button("Allow Accessibility…") { model.requestWindowAccess() }
             }
-            Button("Check window permission") { model.refreshWindowAccess() }
+            Button("Check Accessibility permission") { model.refreshWindowAccess() }
             Text("Protected video may appear black. Window fitting applies only to Claude and Grok Bot.")
                 .font(.caption).foregroundStyle(.secondary)
             Button("Quit") { model.shutdown(); NSApp.terminate(nil) }
@@ -409,8 +449,10 @@ final class Delegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowD
         menu.addItem(.separator())
         add("Identify displays",#selector(identifyScreens),enabled: model.running)
         add("Arrange displays…",#selector(openLayout),enabled: model.running)
+        add("Keep windows on visible screens",#selector(toggleWindowRecovery),enabled: model.windowAccess,checked: model.keepWindowsVisible)
+        add("Recover windows now",#selector(recoverWindows),enabled: model.windowAccess && model.keepWindowsVisible)
         menu.addItem(.separator())
-        add("Native Dock settings (DockDoor)…",#selector(openNativeDockSettings),enabled: model.hasDockDoor)
+        add("Click active Dock icon to minimize",#selector(toggleDockClick),enabled: model.windowAccess,checked: model.dockClickToMinimize)
         add("Keep large windows above the Dock",#selector(toggleWindowFit),enabled: model.windowAccess,checked: model.fitWindows)
         menu.addItem(.separator())
         add("Settings…",#selector(openSettings))
@@ -422,7 +464,9 @@ final class Delegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowD
     @objc private func toggleScreens() { if model.running { model.stop() } else { model.start() } }
     @objc private func identifyScreens() { model.identifyDisplays() }
     @objc private func openLayout() { showLayout() }
-    @objc private func openNativeDockSettings() { model.openDockDoor() }
+    @objc private func toggleDockClick() { model.dockClickToMinimize.toggle() }
+    @objc private func toggleWindowRecovery() { model.keepWindowsVisible.toggle() }
+    @objc private func recoverWindows() { model.recoverWindowsNow() }
     @objc private func toggleWindowFit() { model.fitWindows.toggle() }
     @objc private func openSettings() { showControls() }
     @objc private func quitApp() { model.shutdown(); NSApp.terminate(nil) }
@@ -436,7 +480,8 @@ final class Delegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowD
         } else {
             layoutWindow?.contentViewController = NSHostingController(rootView: LayoutEditor(model: model))
         }
-        layoutWindow?.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true)
+        if let layoutWindow { keepOwnWindowVisible(layoutWindow); layoutWindow.makeKeyAndOrderFront(nil) }
+        NSApp.activate(ignoringOtherApps: true)
     }
     func windowWillClose(_ notification: Notification) {
         if let closed = notification.object as? NSWindow,closed === layoutWindow { model.revertLayout() }
@@ -448,7 +493,18 @@ final class Delegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowD
             w.title = "Lenovo Split"; w.styleMask = [.titled, .closable]
             w.isReleasedWhenClosed = false; w.center(); window = w
         }
-        window?.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true)
+        if let window { keepOwnWindowVisible(window); window.makeKeyAndOrderFront(nil) }
+        NSApp.activate(ignoringOtherApps: true)
+    }
+    private func keepOwnWindowVisible(_ window: NSWindow) {
+        let ids = Set(model.controller.layoutDisplays.map(\.1))
+        let screens = NSScreen.screens.filter { screen in
+            let id = (screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value ?? 0
+            return model.running ? ids.contains(id) : CGDisplayVendorNumber(id) != DisplayModes.virtualVendorID
+        }
+        let title = CGRect(x: window.frame.minX,y: window.frame.maxY-32,width: window.frame.width,height: 32)
+        guard !screens.contains(where: { $0.visibleFrame.intersection(title).width>100 }),let target = screens.first else { return }
+        window.setFrameOrigin(CGPoint(x: target.visibleFrame.midX-window.frame.width/2,y: target.visibleFrame.midY-window.frame.height/2))
     }
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         showControls(); return true

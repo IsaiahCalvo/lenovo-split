@@ -19,9 +19,10 @@ The code targets macOS 14+, but earlier OS releases and other Mac/dock/monitor c
 - Starts when the dock connects; continues waiting if the second monitor selects its dock input later.
 - Checks dock state and recovers after output changes. No firmware flashing.
 - Menu-bar controls that dismiss on an outside click; no app icon in the Dock.
+- **Window recovery:** remember visible window positions during a split session and before unplug; restore surviving windows to the same physical output after reconnect. Windows stranded on the hidden transport are moved onto a usable screen on activation, reconnect, or **Recover windows now**. Recovery needs Accessibility and falls back to a visible screen when no saved position is available.
 - **Identify displays:** temporary numbers on each usable screen.
 - **Arrange displays:** drag rectangles, snap edges, label monitors, swap physical halves, and keep/revert a preview. Unconfirmed layouts revert after 15 seconds; confirmed layouts persist across reconnects.
-- Keeps Apple’s native Dock. Optional integration opens the separately installed [DockDoor](https://github.com/ejbills/DockDoor) settings for native-Dock click-to-minimize and window previews. No replacement app bars are drawn.
+- Built-in **click-to-minimize on Apple’s native Dock**. Click an active app’s icon to minimize its standard desktop windows; click again to restore the set. No DockDoor, Vorssaint, Light Stats or other companion app is needed. No replacement app bars are drawn.
 - Optional window fitting for **Claude and Grok Bot only**, with a separate Accessibility permission. Smaller, tiled, minimized and true fullscreen windows are left alone.
 
 ## Build and install
@@ -59,7 +60,7 @@ The build uses the first local Apple Development identity, when present, to help
 3. Click **Identify displays**. Numbers 1 and 2 identify the virtual panels; 3 identifies the built-in display when present.
 4. Open **Arrange displays**. If the physical monitors have the numbers reversed, use **Swap which physical monitor shows display 1 and 2**. Then drag the rectangles to match the desk and select **Apply layout → Keep layout**.
 5. Give the monitors names if desired. Names are stored against the physical output halves, so toggling Swap updates the names in Arrange and Identify immediately. The virtual screens in macOS use stable names `Lenovo Split 1` and `Lenovo Split 2`. The app does not pretend it can always retrieve both physical monitor names through the combined signal.
-6. Optional: open **Native Dock settings (DockDoor)**. If DockDoor is already installed, select **Dock Click Action → Minimize windows** in its Dock Previews settings. Install and grant any permissions yourself if it is not installed; Lenovo Split does not install it or grant its access. Optional window fitting in Lenovo Split has its own Accessibility permission.
+6. Enable **Keep windows on visible screens** with Accessibility permission to recover windows after reconnect. Then optionally enable **Click an active app’s Dock icon to minimize**. It uses Lenovo Split’s Accessibility grant and acts on the app icon you click. Disable the same click action in any other Dock utility to avoid duplicate handlers. Window fitting is a separate opt-in feature.
 
 The built-in display remains the main screen while present. The hidden wide transport output is deliberately excluded from the editor. Arrange the usable displays in Lenovo Split rather than moving its hidden output in System Settings.
 
@@ -71,9 +72,19 @@ Health checks do not rewrite the split mode or refresh the host EDID. Those chan
 
 ## Native Dock behavior
 
-Lenovo Split does not replace, skin or inject code into Dock.app. Use the separately installed, open-source [DockDoor](https://github.com/ejbills/DockDoor) to add click-to-minimize and previews to Apple’s Dock. A Settings button opens that app if installed. Its source is GPLv3; Lenovo Split remains MIT and does not bundle it.
+The optional click handler is compiled into Lenovo Split. It observes mouse
+clicks near the Dock, confirms the hit belongs to a real application tile in
+`Dock.app`, and uses Accessibility to minimize or restore that app’s standard
+windows. It leaves background app activation and launches to Apple’s Dock.
+Modifier clicks, drags, long presses, right clicks, fullscreen windows and
+Lenovo Split itself are excluded. Turning the feature off removes its event
+monitor and cancels queued work.
 
-DockDoor Free enhances the existing Dock. Its paid Pro edition is a separate replacement dock and is not required here. Neither this integration nor the display split makes multiple native Dock instances appear simultaneously.
+It is adapted from the MIT-licensed [Light Stats](https://github.com/EvilIrving/light-stats)
+implementation, with the copyright and license retained. There is no runtime
+link to that application. The feature does not draw, replace, skin or inject
+code into the Dock. It also does not duplicate Apple’s native Dock on all
+screens simultaneously.
 
 ## How it works
 
@@ -88,10 +99,10 @@ When needed after reconnect, a temporary **Mac-side EDID override** adds the mea
 - Screen Recording is needed for rendering; screen frames stay on this Mac. The app has no networking, analytics, account, or remote logging.
 - Protected video may be black. The app respects macOS content protection.
 - Capture adds latency and CPU/GPU work; this is not direct native scanout of two independent streams.
-- DockDoor is a separate application under its own GPLv3 license. Lenovo Split only opens its settings; no DockDoor code is embedded or relicensed. Its permissions and Dock behavior are controlled in DockDoor.
+- The optional Dock click handler reads the Dock tile URL and local window metadata for the clicked app. Window titles used to restore the same set stay in memory and are never logged or sent anywhere. It does not read document or web page contents. It observes mouse clicks without swallowing or synthesizing them; it does not install a keyboard event tap.
 - Apple’s Dock is not duplicated across displays. The rejected custom app-bar experiment has been removed.
-- Optional window fitting queries geometry only for the two allowlisted apps. It does not grant the app permission by itself or enlarge the allowlist automatically.
-- Layouts, monitor labels and preferences stay in the local user preferences. Logs contain state and geometry, not screen images or chat contents. Review logs before sharing.
+- Optional window fitting still queries geometry only for the two allowlisted apps. Window recovery uses geometry for regular desktop apps to keep them on reachable screens; it does not read document content. The separate Dock click feature can minimize the standard windows of the app whose native Dock icon the user clicks. Both can be turned off and need Accessibility; neither grants permission automatically.
+- Layouts, monitor labels and preferences stay in the local user preferences. Window recovery keeps live window IDs, owner process IDs and screen-relative rectangles in memory for this app session; it does not log window titles. Its AX window-ID lookup is optional: rescue still works if a window has no saved ID. Recovery skips minimized and true fullscreen windows, and does not promise restoration across an app restart. Logs contain state and geometry, not screen images or chat contents. Review logs before sharing.
 - Quitting removes the virtual displays and restores saved physical display positions when those displays remain online. The volatile dock split can remain until the dock resets; stop is not a firmware/default reset.
 - Source includes no device dumps, personal preference files, certificates, credentials, compiled apps, vendor firmware or disassembly.
 

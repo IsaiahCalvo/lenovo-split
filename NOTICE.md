@@ -8,6 +8,23 @@ mode-table access, screen-capture renderer and some build structure derive
 from that project. Its copyright and MIT license are retained. The Lenovo
 DisplayPort backend and new setup/recovery controls are additions.
 
+## Light Stats
+
+The built-in native-Dock click handling adapts the Dock click policy, gesture
+checks, Dock icon hit testing and window-minimize retry flow from
+[Light Stats](https://github.com/EvilIrving/light-stats), at commit
+`8e33bfe643bb339ee254ce618e17e24af63f0d91`:
+
+- `Light Stats/Services/DockClickPolicy.swift`
+- `Light Stats/Services/DockClickService.swift`
+- `Light Stats/Services/DockGeometry.swift`
+- `Light Stats/Services/WindowMinimizeService.swift`
+
+Copyright (c) 2026 EvilIrving, MIT license. The full MIT permission and warranty
+notice and copyright are retained in LICENSE and in the installed app bundle.
+The adapted service is compiled into Lenovo Split; it does not call or require
+the Light Stats app, DockDoor, or Vorssaint. No GPL code from those apps is bundled.
+
 ## fwupd
 
 The dock and MST hub protocol in `app/Sources/DockCore` (HID-to-I2C bridge
